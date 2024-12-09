@@ -107,6 +107,26 @@ def draw_text(text):
     screen.blit(text_surface_restart, (150, 620))
     pygame.display.update()
 
+BUTTON_VOID_TEXT = "E to Void!"
+
+
+def draw_button_void():
+    mouse_pos = pygame.mouse.get_pos()
+    
+    # Updated position: Left of "Q to Morph!" button
+    button_rect = pygame.Rect(SCREEN_WIDTH - 2 * BUTTON_WIDTH - 40, SCREEN_HEIGHT - BUTTON_HEIGHT - 20, BUTTON_WIDTH, BUTTON_HEIGHT)
+    
+    color = BUTTON_HOVER_COLOR if button_rect.collidepoint(mouse_pos) else BUTTON_COLOR
+    pygame.draw.rect(screen, color, button_rect)
+
+    font_button = pygame.font.SysFont('Arial', 20)
+    text = font_button.render(BUTTON_VOID_TEXT, True, TEXT_COLOR)
+    text_rect = text.get_rect(center=button_rect.center)
+    screen.blit(text, text_rect)
+
+    return button_rect
+
+
 def start(board):
     global screen
     possible_piece_moves = []
@@ -117,13 +137,20 @@ def start(board):
     piece = None
     button_message = ""
     game_over_txt = ""
-    transform_pawn = False 
+    transform_pawn = False
+    void_mode = False
+    morphed = False
+    voided = False
 
     while running:
         screen.fill((0, 0, 0))
         draw_background(board)
 
-        button_rect = draw_button()
+        if not morphed:
+            button_rect_q = draw_button()
+
+        if not voided:
+            button_rect_e = draw_button_void()
 
         if button_message:
             message_surface = font.render(button_message, True, (255, 255, 255))
@@ -140,47 +167,46 @@ def start(board):
                     return True
 
             if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_q:
+                if event.key == pygame.K_q and not morphed:
                     transform_pawn = True
                     button_message = ""
-                    print(button_message)
-                    pygame.display.update()
+
+                if event.key == pygame.K_e and not voided:
+                    void_mode = True
+                    button_message = "Click an opponent's piece!"
 
             if event.type == pygame.MOUSEBUTTONDOWN:
                 x = 7 - event.pos[1] // 75
                 y = event.pos[0] // 75
 
                 if not game_over and 0 <= x < 8 and 0 <= y < 8:
-                    if transform_pawn:
+                    if void_mode:
+                        target_piece = board[x][y]
+                        if isinstance(target_piece, ChessPiece) and target_piece.color != board.get_player_color() and not isinstance(target_piece, (King, Queen)):
+                            board[x][y] = None
+                            board.save_pieces()
+                            print(f"Opponent's piece at ({x}, {y}) removed.")
+                            void_mode = False
+                            voided = True
+                            button_message = ""
+                            draw_background(board)
+                            get_ai_move(board)
+                            draw_background(board)
+
+                    elif transform_pawn:
                         if isinstance(board[x][y], Pawn) and board.get_player_color() == board[x][y].color:
                             pawn = board[x][y]
-                            new_rook = Rook(pawn.color, x, y, '\u265C')  
-                            board[x][y] = new_rook 
+                            new_rook = Rook(pawn.color, x, y, '\u265C')
+                            board[x][y] = new_rook
                             board.save_pieces()
                             print(f"Pawn at ({x}, {y}) transformed into a rook.")
-
                             transform_pawn = False
-                            visible_moves = False  
-                            possible_piece_moves.clear() 
-                            draw_background(board) 
-
-                            if board.ai:
-                                get_ai_move(board) 
-                                draw_background(board) 
-
-                            if board.white_won():
-                                game_over = True
-                                game_over_txt = "WHITE WINS!"
-                            elif board.black_won():
-                                game_over = True
-                                game_over_txt = "BLACK WINS!"
-                            elif board.draw():
-                                game_over = True
-                                game_over_txt = "DRAW!"
+                            morphed = True
+                            possible_piece_moves.clear()
+                            draw_background(board)
+                            get_ai_move(board)
                         else:
                             button_message = ""
-                            print(button_message)
-
                     else:
                         if isinstance(board[x][y], ChessPiece) and (
                             board.get_player_color() == board[x][y].color or not board.ai
